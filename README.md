@@ -1,3 +1,3 @@
 
 Run with:
-cat toy.txt | python earley.py toy.pcfg 
+cat inputs/toy.txt | python earley.py grammars/toy.pcfg 
