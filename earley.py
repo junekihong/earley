@@ -49,7 +49,8 @@ def next_element_of(state):
 def print_chart(chart):
     for i,x in enumerate(chart):
         print "STATE {}:".format(i)
-        for y in x:
+        for y in sorted(x.keys()):
+            #if finished(y):
             print y, "\t", x[y]
         print "-"*80
     print
@@ -58,7 +59,7 @@ def INIT(words):
     chart, backptrs = [], []
     for x in xrange(len(words)+1):
         chart.append(OrderedDict())
-        backptrs.append(defaultdict(tuple))
+        backptrs.append(defaultdict(list))
     return chart, backptrs
 
 def EARLEY_PARSE(words, grammar):
@@ -86,11 +87,11 @@ def PREDICTOR(chart, backptrs, state, k, grammar_table):
         new_state = (X, gamma, 0, k)
         if (X, gamma, 0, k) not in chart[k]:
             chart[k][(X, gamma, 0, k)] = p
-            backptrs[k][(X, gamma, 0, k)] = (state, k)
+            backptrs[k][(X, gamma, 0, k)] = [(state, k)]
         elif p > chart[k][(X, gamma, 0, k)]:
             del chart[k][(X, gamma, 0, k)]
             chart[k][(X, gamma, 0, k)] = p
-            backptrs[k][(X, gamma, 0, k)] = (state, k)
+            backptrs[k][(X, gamma, 0, k)] = [(state, k)]
     return chart, backptrs
 
 def SCANNER(chart, backptrs, state, k, pos_table, words):
@@ -100,44 +101,88 @@ def SCANNER(chart, backptrs, state, k, pos_table, words):
 
     if pos_table[words[k]][A] != 0:
         chart[k+1][(X, gamma, i+1, j)] = pos_table[words[k]][A]
-        backptrs[k+1][(X, gamma, i+1, j)] = (state, k)
+        backptrs[k+1][(X, gamma, i+1, j)] = [(state, k)]
     return chart, backptrs
 
-def COMPLETER(chart, backptrs, state, k):
-    B, gamma, i, x = state
-    for state2 in chart[x]:
-        A, gamma2, i2, j = state2
-        if finished(state2):
+def COMPLETER(chart, backptrs, completed_state, k):
+    B, gamma, i, x = completed_state
+    for incomplete_state in chart[x]:
+        A, gamma2, i2, j = incomplete_state
+        if finished(incomplete_state) or not finished(completed_state):
             continue
+        
         if gamma2[i2] == B:
-            p1 = chart[k][state]
-            p2 = chart[x][state2]
-            if (A, gamma2, i2+1, j) not in chart[k]:
-                chart[k][(A, gamma2, i2+1, j)] = p1*p2
-                backptrs[k][(A, gamma2, i2+1, j)] = (state, k)
-            elif p1*p2 > chart[k][(A, gamma2, i2+1, j)]:
-                del chart[k][(A, gamma2, i2+1, j)]
-                chart[k][(A, gamma2, i2+1,j)] = p1*p2
-                backptrs[k][(A, gamma2, i2+1, j)] = (state, k)
+            p1 = chart[k][completed_state]
+            p2 = chart[x][incomplete_state]
+
+            progressed_state = (A, gamma2, i2+1, j)
+            if progressed_state not in chart[k]:
+                chart[k][progressed_state] = p1*p2
+
+
+                for prev_backptr in backptrs[x][incomplete_state]:
+                    if finished(prev_backptr[0]):
+                        backptrs[k][progressed_state].append(prev_backptr)
+                backptrs[k][progressed_state].append((completed_state, k))
+                
+                """
+                if completed_state[0] == "NP" and completed_state[1] == ("NNP", "NN"):
+                    print "incomplete", incomplete_state
+                    print "complete", completed_state
+                    print "progressed", progressed_state
+
+                    print "\t",  backptrs[k][progressed_state], "\t",  backptrs[x][incomplete_state]
+                    print
+                    pass
+                """
+                
+            elif p1*p2 > chart[k][progressed_state]:
+                del chart[k][progressed_state]
+                del backptrs[k][progressed_state]
+                chart[k][progressed_state] = p1*p2
+                
+                for prev_backptr in backptrs[x][incomplete_state]:
+                    if finished(prev_backptr[0]):
+                        backptrs[k][progressed_state].append(prev_backptr)
+                backptrs[k][progressed_state].append((completed_state, k))
+
+                
     return chart, backptrs
 
 
-def BACKTRACK(backptrs, state, k, visited):
-    yield (state[0], state[1])
-    tovisit = [(state, k)]
+def BACKTRACK(chart, backptrs, state, k, visited, nonterminals):
+    #yield (state[0], state[1])
+    root = Tree(label=state[0], span=(0,0), wrd=None, subs=[])
+    
+    tovisit = [(state, root, k)]
     while tovisit:
-        state, k = tovisit.pop()
-        back = backptrs[k][state]
-        if not back:
-            return
+        state, tree, k = tovisit.pop()
+        back_list = [back for back in backptrs[k][state] if finished(back[0]) and back[0] not in visited]
 
-        back_state, back_k = back
-        if finished(back_state):
-            yield (back_state[0], back_state[1])
+        #print state, "\t\t",
+        if not finished(state):
+            continue
+        for back in back_list:
+            back_state, back_k = back
+            visited.add(back_state)
+            #yield (back_state[0], back_state[1])
+
+            #print back_state, 
             
-        tovisit.insert(0, (back_state, back_k))
-
-    print tovisit
+            subtree = Tree(label=back_state[0], span=(0,0), wrd=None, subs=[])
+            tree.subs.append(subtree)
+            terminal = True
+            for alpha in back_state[1]:
+                if alpha in nonterminals:
+                    terminal = False
+                    break
+            if terminal:
+                subtree.word = " ".join(back_state[1])
+            else:
+                tovisit.append((back_state, subtree, back_k))
+        #print
+        
+    return root
         
 if __name__ == "__main__":
     sentences = [x.strip() for x in sys.stdin.readlines()]
@@ -161,32 +206,7 @@ if __name__ == "__main__":
         if best_state is None:
             continue
 
-                
         visited = set([best_state])
-        rules = BACKTRACK(backptrs, best_state, len(chart)-1, visited)
-        rules = [x for x in rules]
-        
-        
-        start,head = None, None
-        toexplore = []
-        for rule in rules:
-            X, gamma = rule
-            if head is None:
-                head = Tree(label=X, span=(0,0), wrd=None, subs=[])
-                start = head
-            else:
-                if not toexplore:
-                    continue
-                head = toexplore.pop()
-            for alpha in gamma:
-                if alpha in nonterminals:
-                    child = Tree(label=alpha, span=(0,0), wrd=None, subs=[])
-                    toexplore.append(child)
-                    head.subs.append(child)
-                elif len(gamma) == 1:
-                    head.word = alpha
-                else:
-                    child = Tree(label=None, span=(0,0), wrd=alpha, subs=None)
-                    head.subs.append(child)
-        print start, best_prob
-
+        tree = BACKTRACK(chart, backptrs, best_state, len(chart)-1, visited, nonterminals)
+        print tree, best_prob
+        #tree.pp()
