@@ -22,23 +22,42 @@ def process_grammar_line(line):
     return X, gamma, p
 
 def read_grammar(lines):
-    nonterminals = set()
+    TOP = lines[0].strip()
+    nonterminals,terminals = set(), set()
     grammar_table = defaultdict(set)
     pos_table = defaultdict(lambda: defaultdict(float))
-    vocabulary = set()
-    #first_table = defaultdict(set())
-    TOP = lines[0].strip()
+    first_table = defaultdict(set)
+
+    # To get nonterminals
     for line in lines[1:]:
         X, gamma, p = process_grammar_line(line)
         grammar_table[X].add((gamma, p))
         nonterminals.add(X)
+
+    # To get terminals and to initialize the first_table
     for line in lines[1:]:
         X, gamma, p = process_grammar_line(line)
         for alpha in gamma:
             if alpha not in nonterminals:
-                vocabulary.add(alpha)
+                terminals.add(alpha)
+                first_table[alpha].add(alpha)
                 pos_table[alpha][X] = p
-    return nonterminals, grammar_table, pos_table, TOP
+        if gamma[0] not in nonterminals:
+            first_table[X].add(gamma[0])
+
+    first_table_updates = -1
+    while first_table_updates != 0:
+        first_table_updates = 0
+        for line in lines[1:]:
+            X, gamma, _ = process_grammar_line(line)
+            Y = gamma[0]
+
+            for a in first_table[Y]:
+                if a not in first_table[X]:
+                    first_table[X].add(a)
+                    first_table_updates += 1
+            #print first_table_updates, X, Y
+    return TOP, nonterminals, grammar_table, pos_table, first_table
 
 def finished(state):
     return state[2] == len(state[1])
@@ -63,27 +82,37 @@ def INIT(words):
     return chart, backptrs
 
 def EARLEY_PARSE(words, grammar):
-    nonterminals, grammar_table, pos_table, TOP = grammar
+    TOP, nonterminals, grammar_table, pos_table, first_table = grammar
     chart, backptrs = INIT(words)
     chart[0][("INITIALIZE", (TOP,), 0, 0)] = 1.0
     for k in xrange(len(words)):
         for state in chart[k]:
             if not finished(state):
                 if next_element_of(state) in nonterminals:
-                    chart, backptrs = PREDICTOR(chart, backptrs, state, k, grammar_table)
+                    chart, backptrs = PREDICTOR(chart, backptrs,
+                                                state, k, grammar_table,
+                                                first_table, words[k])
                 else:
                     if next_element_of(state) != words[k]:
                         continue
-                    chart, backptrs = SCANNER(chart, backptrs, state, k, pos_table, words)
+                    chart, backptrs = SCANNER(chart, backptrs,
+                                              state, k, pos_table, words)
             else:
                 chart, backptrs = COMPLETER(chart, backptrs, state, k)
     for state in chart[k+1]:
         chart, backptrs = COMPLETER(chart, backptrs, state, k+1)
     return chart, backptrs
 
-def PREDICTOR(chart, backptrs, state, k, grammar_table):
+def PREDICTOR(chart, backptrs,
+              state, k, grammar_table,
+              first_table=None, word=None):
     X = next_element_of(state)
     for gamma,p in grammar_table[X]:
+        if (first_table is not None and
+            word is not None and
+            word not in first_table[gamma[0]]):
+            continue
+        
         new_state = (X, gamma, 0, k)
         if (X, gamma, 0, k) not in chart[k]:
             chart[k][(X, gamma, 0, k)] = p
@@ -157,7 +186,7 @@ def BACKTRACK(chart, backptrs, state, k, visited, nonterminals):
 if __name__ == "__main__":
     sentences = [x.strip() for x in sys.stdin.readlines()]
     grammar = read_grammar(open(sys.argv[1], 'r').readlines())
-    nonterminals, grammar_table, pos_table, TOP = grammar
+    TOP, nonterminals, grammar_table, pos_table, first_table = grammar
 
     for sentence in sentences:
         words = sentence.split()
