@@ -64,7 +64,7 @@ def INIT(words):
 def EARLEY_PARSE(words, grammar):
     nonterminals, grammar_table, pos_table, TOP = grammar
     chart, backptrs = INIT(words)
-    chart[0][(TOP, ("S",), 0, 0)] = 1.0
+    chart[0][("INITIALIZE", (TOP,), 0, 0)] = 1.0
     for k in xrange(len(words)):
         for state in chart[k]:
             if not finished(state):
@@ -150,41 +150,43 @@ if __name__ == "__main__":
         #print "CHART:"
         #print_chart(chart)
 
-        
+        best_state, best_prob = None, None
         for state in chart[len(chart)-1]:
-            
-            if finished(state):
-                if state[0] != TOP:
-                    continue
-                probability = chart[len(chart)-1][state]
-                visited = set([state])
+            if not finished(state) or state[0] != TOP:
+                continue
+            probability = chart[len(chart)-1][state]
+            if best_state is None or probability > best_prob:
+                best_state = state
+                best_prob = probability
+        if best_state is None:
+            continue
 
-
-                rules = BACKTRACK(backptrs, state, len(chart)-1, visited)
-                rules = [x for x in rules]
                 
-                start,head = None, None
-                toexplore = []
-                for rule in rules:
-                    X, gamma = rule
-                    if head is None:
-                        head = Tree(label=X, span=(0,0), wrd=None, subs=[])
-                        start = head
-                    else:
-                        if not toexplore:
-                            continue
-                        head = toexplore.pop()
-                    for alpha in gamma:
-                        if alpha in nonterminals:
-                            child = Tree(label=alpha, span=(0,0), wrd=None, subs=[])
-                            toexplore.append(child)
-                            head.subs.append(child)
-                        elif len(gamma) == 1:
-                            head.word = alpha
-                        else:
-                            child = Tree(label=None, span=(0,0), wrd=alpha, subs=None)
-                            head.subs.append(child)
-                print start, probability
+        visited = set([best_state])
+        rules = BACKTRACK(backptrs, best_state, len(chart)-1, visited)
+        rules = [x for x in rules]
+        
+        
+        start,head = None, None
+        toexplore = []
+        for rule in rules:
+            X, gamma = rule
+            if head is None:
+                head = Tree(label=X, span=(0,0), wrd=None, subs=[])
+                start = head
+            else:
+                if not toexplore:
+                    continue
+                head = toexplore.pop()
+            for alpha in gamma:
+                if alpha in nonterminals:
+                    child = Tree(label=alpha, span=(0,0), wrd=None, subs=[])
+                    toexplore.append(child)
+                    head.subs.append(child)
+                elif len(gamma) == 1:
+                    head.word = alpha
+                else:
+                    child = Tree(label=None, span=(0,0), wrd=alpha, subs=None)
+                    head.subs.append(child)
+        print start, best_prob
 
-                #print
-            #exit()
