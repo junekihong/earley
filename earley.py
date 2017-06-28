@@ -18,29 +18,27 @@ def process_grammar_line(line):
     gamma,p = rhs.strip().split("#")
     X = X.strip()
     gamma = tuple(gamma.strip().split(" "))
-    #p = float(p)
-    return X, gamma
+    p = float(p)
+    return X, gamma, p
 
 def read_grammar(lines):
     nonterminals = set()
     grammar_table = defaultdict(set)
-    pos_table = defaultdict(set)
+    pos_table = defaultdict(lambda: defaultdict(float))
     vocabulary = set()
     #first_table = defaultdict(set())
-    TOP = lines[0]
+    TOP = lines[0].strip()
     for line in lines[1:]:
-        X, gamma = process_grammar_line(line)
-        grammar_table[X].add(gamma)
+        X, gamma, p = process_grammar_line(line)
+        grammar_table[X].add((gamma, p))
         nonterminals.add(X)
     for line in lines[1:]:
-        X, gamma = process_grammar_line(line)
+        X, gamma, p = process_grammar_line(line)
         for alpha in gamma:
             if alpha not in nonterminals:
                 vocabulary.add(alpha)
-                if len(gamma) == 1:
-                    pos_table[gamma[0]].add(X)
-    return nonterminals, grammar_table, pos_table
-
+                pos_table[alpha][X] = p
+    return nonterminals, grammar_table, pos_table, TOP
 
 def finished(state):
     return state[2] == len(state[1])
@@ -55,67 +53,138 @@ def print_chart(chart):
             print y, "\t", x[y]
         print "-"*80
     print
+    
 def INIT(words):
-    S = []
+    chart, backptrs = [], []
     for x in xrange(len(words)+1):
-        S.append(OrderedDict())
-    return S
+        chart.append(OrderedDict())
+        backptrs.append(defaultdict(tuple))
+    return chart, backptrs
 
 def EARLEY_PARSE(words, grammar):
-    nonterminals, grammar_table, pos_table = grammar
-    S = INIT(words)
-    S[0][("TOP", ("S",), 0, 0)] = None
+    nonterminals, grammar_table, pos_table, TOP = grammar
+    chart, backptrs = INIT(words)
+    chart[0][(TOP, ("S",), 0, 0)] = 1.0
     for k in xrange(len(words)):
-        for state in S[k]:
+        for state in chart[k]:
             if not finished(state):
                 if next_element_of(state) in nonterminals:
-                    #print state
-                    #print_chart(S)
-                    S = PREDICTOR(S, state, k, grammar_table)
+                    chart, backptrs = PREDICTOR(chart, backptrs, state, k, grammar_table)
                 else:
                     if next_element_of(state) != words[k]:
                         continue
-                    S = SCANNER(S, state, k, pos_table, words)
+                    chart, backptrs = SCANNER(chart, backptrs, state, k, pos_table, words)
             else:
-                S = COMPLETER(S, state, k)
-    for state in S[k+1]:
-        S = COMPLETER(S, state, k+1)
-    return S
+                chart, backptrs = COMPLETER(chart, backptrs, state, k)
+    for state in chart[k+1]:
+        chart, backptrs = COMPLETER(chart, backptrs, state, k+1)
+    return chart, backptrs
 
-def PREDICTOR(S, state, k, grammar_table):
+def PREDICTOR(chart, backptrs, state, k, grammar_table):
     X = next_element_of(state)
-    for gamma in grammar_table[X]:
-        S[k][(X, gamma, 0, k)] = state
-    return S
+    for gamma,p in grammar_table[X]:
+        new_state = (X, gamma, 0, k)
+        if (X, gamma, 0, k) not in chart[k]:
+            chart[k][(X, gamma, 0, k)] = p
+            backptrs[k][(X, gamma, 0, k)] = (state, k)
+        elif p > chart[k][(X, gamma, 0, k)]:
+            del chart[k][(X, gamma, 0, k)]
+            chart[k][(X, gamma, 0, k)] = p
+            backptrs[k][(X, gamma, 0, k)] = (state, k)
+    return chart, backptrs
 
-def SCANNER(S, state, k, pos_table, words):
+def SCANNER(chart, backptrs, state, k, pos_table, words):
     X, gamma, i, j = state
     a = next_element_of(state)
     A = state[0]
-    if A in pos_table[words[k]]:
-        S[k+1][(X, gamma, i+1, j)] = state
-    return S
 
-def COMPLETER(S, state, k):
+    if pos_table[words[k]][A] != 0:
+        chart[k+1][(X, gamma, i+1, j)] = pos_table[words[k]][A]
+        backptrs[k+1][(X, gamma, i+1, j)] = (state, k)
+    return chart, backptrs
+
+def COMPLETER(chart, backptrs, state, k):
     B, gamma, i, x = state
-    for state in S[x]:
-        A, gamma2, i2, j = state
-        if finished(state):
+    for state2 in chart[x]:
+        A, gamma2, i2, j = state2
+        if finished(state2):
             continue
         if gamma2[i2] == B:
-            S[k][(A, gamma2, i2+1,j)] = state
-    return S
+            p1 = chart[k][state]
+            p2 = chart[x][state2]
+            if (A, gamma2, i2+1, j) not in chart[k]:
+                chart[k][(A, gamma2, i2+1, j)] = p1*p2
+                backptrs[k][(A, gamma2, i2+1, j)] = (state, k)
+            elif p1*p2 > chart[k][(A, gamma2, i2+1, j)]:
+                del chart[k][(A, gamma2, i2+1, j)]
+                chart[k][(A, gamma2, i2+1,j)] = p1*p2
+                backptrs[k][(A, gamma2, i2+1, j)] = (state, k)
+    return chart, backptrs
 
 
+def BACKTRACK(backptrs, state, k, visited):
+    yield (state[0], state[1])
+    tovisit = [(state, k)]
+    while tovisit:
+        state, k = tovisit.pop()
+        back = backptrs[k][state]
+        if not back:
+            return
+
+        back_state, back_k = back
+        if finished(back_state):
+            yield (back_state[0], back_state[1])
+            
+        tovisit.insert(0, (back_state, back_k))
+
+    print tovisit
+        
 if __name__ == "__main__":
     sentences = [x.strip() for x in sys.stdin.readlines()]
-
-    TOP = None
-    nonterminals, grammar_table, pos_table = read_grammar(open(sys.argv[1], 'r').readlines())
+    grammar = read_grammar(open(sys.argv[1], 'r').readlines())
+    nonterminals, grammar_table, pos_table, TOP = grammar
 
     for sentence in sentences:
         words = sentence.split()
-        chart = EARLEY_PARSE(words, (nonterminals, grammar_table, pos_table))
-        print "CHART:"
-        #print chart
-        print_chart(chart)
+        chart,backptrs = EARLEY_PARSE(words, grammar)
+        #print "CHART:"
+        #print_chart(chart)
+
+        
+        for state in chart[len(chart)-1]:
+            
+            if finished(state):
+                if state[0] != TOP:
+                    continue
+                probability = chart[len(chart)-1][state]
+                visited = set([state])
+
+
+                rules = BACKTRACK(backptrs, state, len(chart)-1, visited)
+                rules = [x for x in rules]
+                
+                start,head = None, None
+                toexplore = []
+                for rule in rules:
+                    X, gamma = rule
+                    if head is None:
+                        head = Tree(label=X, span=(0,0), wrd=None, subs=[])
+                        start = head
+                    else:
+                        if not toexplore:
+                            continue
+                        head = toexplore.pop()
+                    for alpha in gamma:
+                        if alpha in nonterminals:
+                            child = Tree(label=alpha, span=(0,0), wrd=None, subs=[])
+                            toexplore.append(child)
+                            head.subs.append(child)
+                        elif len(gamma) == 1:
+                            head.word = alpha
+                        else:
+                            child = Tree(label=None, span=(0,0), wrd=alpha, subs=None)
+                            head.subs.append(child)
+                print start, probability
+
+                #print
+            #exit()
