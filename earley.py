@@ -97,10 +97,8 @@ def EARLEY_PARSE(words, grammar):
                     chart, backptrs, unfinished = PREDICTOR(chart, backptrs, unfinished,
                                                             state, k, grammar_table, words[k])
                 else:
-                    if next_element_of(state) != words[k]:
-                        continue
-                    chart, backptrs, unfinished = SCANNER(chart, backptrs, unfinished,
-                                                          state, k, pos_table, words)
+                    chart, unfinished = SCANNER(chart, unfinished,
+                                                state, k, pos_table, words)
             else:
                 chart, backptrs, unfinished = COMPLETER(chart, backptrs, unfinished, state, k)
     for state in chart[k+1]:
@@ -121,7 +119,7 @@ def PREDICTOR(chart, backptrs, unfinished,
             chart[k][new_state] = p
     return chart, backptrs, unfinished
 
-def SCANNER(chart, backptrs, unfinished,
+def SCANNER(chart, unfinished,
             state, k, pos_table, words):
     X, gamma, i, j = state
     a = next_element_of(state)
@@ -131,7 +129,7 @@ def SCANNER(chart, backptrs, unfinished,
         chart[k+1][progressed_state] = pos_table[words[k]][A]
         if not finished(progressed_state):
             unfinished[k+1][next_element_of(progressed_state)].add(progressed_state)
-    return chart, backptrs, unfinished
+    return chart, unfinished
 
 def COMPLETER(chart, backptrs, unfinished, completed_state, k):
     B, gamma, i, x = completed_state
@@ -165,7 +163,7 @@ def BACKTRACK(chart, backptrs, state, k, visited, nonterminals):
     tovisit = [(state, root, k)]
     while tovisit:
         state, tree, k = tovisit.pop()
-        back_list = [back for back in backptrs[k][state] if finished(back[0]) and back[0] not in visited]
+        back_list = backptrs[k][state]
         for back in back_list:
             back_state, back_k = back
             visited.add(back_state)
