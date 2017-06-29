@@ -100,7 +100,8 @@ def EARLEY_PARSE(words, grammar):
             else:
                 chart, backptrs = COMPLETER(chart, backptrs, state, k)
     for state in chart[k+1]:
-        chart, backptrs = COMPLETER(chart, backptrs, state, k+1)
+        if finished(state):
+            chart, backptrs = COMPLETER(chart, backptrs, state, k+1)
     return chart, backptrs
 
 def PREDICTOR(chart, backptrs,
@@ -128,20 +129,22 @@ def SCANNER(chart, backptrs, state, k, pos_table, words):
     a = next_element_of(state)
     A = state[0]
     if pos_table[words[k]][A] != 0:
-        chart[k+1][(X, gamma, i+1, j)] = pos_table[words[k]][A]
+        progressed_state = (X, gamma, i+1, j)
+        chart[k+1][progressed_state] = pos_table[words[k]][A]
         backptrs[k+1][(X, gamma, i+1, j)] = [(state, k)]
     return chart, backptrs
 
 def COMPLETER(chart, backptrs, completed_state, k):
     B, gamma, i, x = completed_state
     for incomplete_state in chart[x]:
-        A, gamma2, i2, j = incomplete_state
-        if finished(incomplete_state) or not finished(completed_state):
+        if finished(incomplete_state):
             continue
+        A, gamma2, i2, j = incomplete_state
         if gamma2[i2] == B:
             p1 = chart[k][completed_state]
             p2 = chart[x][incomplete_state]
             progressed_state = (A, gamma2, i2+1, j)
+            
             if progressed_state not in chart[k]:
                 chart[k][progressed_state] = p1*p2
                 for prev_backptr in backptrs[x][incomplete_state]:
@@ -150,7 +153,8 @@ def COMPLETER(chart, backptrs, completed_state, k):
                 backptrs[k][progressed_state].append((completed_state, k))
             elif p1*p2 > chart[k][progressed_state]:
                 del chart[k][progressed_state]
-                del backptrs[k][progressed_state]
+                backptrs[k][progressed_state] = []
+                
                 chart[k][progressed_state] = p1*p2
                 for prev_backptr in backptrs[x][incomplete_state]:
                     if finished(prev_backptr[0]):
@@ -191,8 +195,8 @@ if __name__ == "__main__":
     for sentence in sentences:
         words = sentence.split()
         chart,backptrs = EARLEY_PARSE(words, grammar)
-        # print "CHART:"
-        # print_chart(chart)
+        #print "CHART:"
+        #print_chart(chart)
         
         best_state, best_prob = None, None
         for state in chart[len(chart)-1]:
