@@ -8,6 +8,7 @@ import gflags as flags
 FLAGS=flags.FLAGS
 
 from collections import defaultdict, OrderedDict
+from heapdict import heapdict
 from pprint import pprint
 
 def process_grammar_line(line):
@@ -60,7 +61,16 @@ def read_grammar(lines):
         X, gamma, p = process_grammar_line(line)
         for a in first_table[gamma[0]]:
             grammar_table[X][a].add((gamma, p))
-                    
+
+    """
+    for X in grammar_table:
+        for a in grammar_table[X]:
+            #print grammar_table[X][a]
+            grammar_table[X][a] = sorted(grammar_table[X][a], key=lambda item: item[1], reverse=True)
+            #print grammar_table[X][a]
+    #exit()
+    """
+
     return TOP, nonterminals, grammar_table, pos_table
 
 def finished(state):
@@ -89,7 +99,33 @@ def INIT(words):
 def EARLEY_PARSE(words, grammar):
     TOP, nonterminals, grammar_table, pos_table = grammar
     chart, backptrs, unfinished = INIT(words)
-    chart[0][("INITIALIZE", (TOP,), 0, 0)] = 1.0
+
+
+    initial = ("INITIALIZE", (TOP,), 0, 0)
+    chart[0][initial] = 1.0
+    queue = heapdict()
+    queue[initial] = -chart[0][initial]
+
+
+    for k in xrange(len(words)):
+        while queue:
+            #print queue.peekitem()
+            state,_ = queue.popitem()
+
+            
+            if not finished(state):
+                if next_element_of(state) in nonterminals:
+                    queue, chart, backptrs, unfinished = PREDICTOR(queue, chart, backptrs, unfinished,
+                                                                   state, k, grammar_table, words[k])
+                else:
+                    queue, chart, unfinished = SCANNER(queue, chart, unfinished,
+                                                       state, k, pos_table, words)
+            else:
+                queue, chart, backptrs, unfinished = COMPLETER(queue, chart, backptrs, unfinished, state, k)
+        for state in chart[k+1]:
+            queue[state] = chart[k+1][state]
+
+    """
     for k in xrange(len(words)):
         for state in chart[k]:
             if not finished(state):
@@ -97,18 +133,18 @@ def EARLEY_PARSE(words, grammar):
                     chart, backptrs, unfinished = PREDICTOR(chart, backptrs, unfinished,
                                                             state, k, grammar_table, words[k])
                 else:
-                    if next_element_of(state) != words[k]:
-                        continue
-                    chart, backptrs, unfinished = SCANNER(chart, backptrs, unfinished,
-                                                          state, k, pos_table, words)
+                    chart, unfinished = SCANNER(chart, unfinished,
+                                                state, k, pos_table, words)
             else:
                 chart, backptrs, unfinished = COMPLETER(chart, backptrs, unfinished, state, k)
+    """
+    
     for state in chart[k+1]:
         if finished(state):
-            chart, backptrs, unfinished = COMPLETER(chart, backptrs, unfinished, state, k+1)
+            queue, chart, backptrs, unfinished = COMPLETER(queue, chart, backptrs, unfinished, state, k+1)
     return chart, backptrs
 
-def PREDICTOR(chart, backptrs, unfinished,
+def PREDICTOR(queue, chart, backptrs, unfinished,
               state, k, grammar_table, word):
     X = next_element_of(state)
     for gamma,p in grammar_table[X][word]:
@@ -116,12 +152,14 @@ def PREDICTOR(chart, backptrs, unfinished,
         if (X, gamma, 0, k) not in chart[k]:
             chart[k][new_state] = p
             unfinished[k][next_element_of(new_state)].add(new_state)
+            queue[new_state] = -p
         elif p > chart[k][(X, gamma, 0, k)]:
             del chart[k][new_state]
             chart[k][new_state] = p
-    return chart, backptrs, unfinished
+            queue[new_state] = -p
+    return queue, chart, backptrs, unfinished
 
-def SCANNER(chart, backptrs, unfinished,
+def SCANNER(queue, chart, unfinished,
             state, k, pos_table, words):
     X, gamma, i, j = state
     a = next_element_of(state)
@@ -129,21 +167,38 @@ def SCANNER(chart, backptrs, unfinished,
     if pos_table[words[k]][A] != 0:
         progressed_state = (X, gamma, i+1, j)
         chart[k+1][progressed_state] = pos_table[words[k]][A]
+        #queue[progressed_state] = -pos_table[words[k]][A]
+        
         if not finished(progressed_state):
             unfinished[k+1][next_element_of(progressed_state)].add(progressed_state)
-    return chart, backptrs, unfinished
+    return queue, chart, unfinished
 
-def COMPLETER(chart, backptrs, unfinished, completed_state, k):
+def COMPLETER(queue, chart, backptrs, unfinished, completed_state, k):
     B, gamma, i, x = completed_state
 
-    for incomplete_state in unfinished[x][B]:
+    # Sort unfinished states looking for a B in order by weight
+    #if len(unfinished[x][B]) > 5:
+    #candidates = sorted([(chart[x][incomplete_state], incomplete_state)
+    #                     for incomplete_state in unfinished[x][B]],
+    #                    reverse=True)
+    #else:
+    #    candidates = [(chart[x][incomplete_state], incomplete_state)
+    #                  for incomplete_state in unfinished[x][B]]
+    candidates = unfinished[x][B]
+    for incomplete_state in candidates:
         A, gamma2, i2, j = incomplete_state
+
+        #print completed_state
+        #print k, chart[k]
+        
         p1 = chart[k][completed_state]
         p2 = chart[x][incomplete_state]
         progressed_state = (A, gamma2, i2+1, j)
         
         if progressed_state not in chart[k]:
             chart[k][progressed_state] = p1*p2
+            queue[progressed_state] = -p1*p2
+            
             for prev_backptr in backptrs[x][incomplete_state]:
                 backptrs[k][progressed_state].append(prev_backptr)
             backptrs[k][progressed_state].append((completed_state, k))
@@ -154,10 +209,13 @@ def COMPLETER(chart, backptrs, unfinished, completed_state, k):
             del chart[k][progressed_state]
             backptrs[k][progressed_state] = []
             chart[k][progressed_state] = p1*p2
+            queue[progressed_state] = -p1*p2
+            
             for prev_backptr in backptrs[x][incomplete_state]:
                 backptrs[k][progressed_state].append(prev_backptr)
             backptrs[k][progressed_state].append((completed_state, k))
-    return chart, backptrs, unfinished
+            
+    return queue, chart, backptrs, unfinished
 
 
 def BACKTRACK(chart, backptrs, state, k, visited, nonterminals):
@@ -165,7 +223,7 @@ def BACKTRACK(chart, backptrs, state, k, visited, nonterminals):
     tovisit = [(state, root, k)]
     while tovisit:
         state, tree, k = tovisit.pop()
-        back_list = [back for back in backptrs[k][state] if finished(back[0]) and back[0] not in visited]
+        back_list = backptrs[k][state]
         for back in back_list:
             back_state, back_k = back
             visited.add(back_state)
