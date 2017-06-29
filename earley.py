@@ -115,12 +115,10 @@ def PREDICTOR(chart, backptrs, unfinished,
         new_state = (X, gamma, 0, k)
         if (X, gamma, 0, k) not in chart[k]:
             chart[k][new_state] = p
-            backptrs[k][new_state] = [(state, k)]
             unfinished[k][next_element_of(new_state)].add(new_state)
         elif p > chart[k][(X, gamma, 0, k)]:
             del chart[k][new_state]
             chart[k][new_state] = p
-            backptrs[k][new_state] = [(state, k)]
     return chart, backptrs, unfinished
 
 def SCANNER(chart, backptrs, unfinished,
@@ -131,7 +129,6 @@ def SCANNER(chart, backptrs, unfinished,
     if pos_table[words[k]][A] != 0:
         progressed_state = (X, gamma, i+1, j)
         chart[k+1][progressed_state] = pos_table[words[k]][A]
-        backptrs[k+1][(X, gamma, i+1, j)] = [(state, k)]
         if not finished(progressed_state):
             unfinished[k+1][next_element_of(progressed_state)].add(progressed_state)
     return chart, backptrs, unfinished
@@ -148,8 +145,7 @@ def COMPLETER(chart, backptrs, unfinished, completed_state, k):
         if progressed_state not in chart[k]:
             chart[k][progressed_state] = p1*p2
             for prev_backptr in backptrs[x][incomplete_state]:
-                if finished(prev_backptr[0]):
-                    backptrs[k][progressed_state].append(prev_backptr)
+                backptrs[k][progressed_state].append(prev_backptr)
             backptrs[k][progressed_state].append((completed_state, k))
             if not finished(progressed_state):
                 unfinished[k][next_element_of(progressed_state)].add(progressed_state)
@@ -159,10 +155,8 @@ def COMPLETER(chart, backptrs, unfinished, completed_state, k):
             backptrs[k][progressed_state] = []
             chart[k][progressed_state] = p1*p2
             for prev_backptr in backptrs[x][incomplete_state]:
-                if finished(prev_backptr[0]):
-                    backptrs[k][progressed_state].append(prev_backptr)
+                backptrs[k][progressed_state].append(prev_backptr)
             backptrs[k][progressed_state].append((completed_state, k))
-                
     return chart, backptrs, unfinished
 
 
