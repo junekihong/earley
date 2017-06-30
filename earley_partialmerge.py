@@ -95,7 +95,6 @@ def EARLEY_PARSE(words, grammar):
     chart, backptrs, unfinished = INIT(words)
     chart[0][(TOP, (TOP,), 0, 0)] = 0.0
 
-    seen = defaultdict(list)
     for k in xrange(len(words)):
         for i,state in enumerate(chart[k]):
             #print k, i, state, chart[k][state]
@@ -107,7 +106,6 @@ def EARLEY_PARSE(words, grammar):
                     chart, unfinished = SCANNER(chart, unfinished,
                                                 state, k, pos_table, words)
             else:
-                seen[(k,state)].append((i,chart[k][state]))
                 chart, backptrs, unfinished = COMPLETER(chart, backptrs, unfinished, state, k)
     
     for i,state in enumerate(chart[k+1]):

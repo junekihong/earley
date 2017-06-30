@@ -9,6 +9,7 @@ FLAGS=flags.FLAGS
 
 from collections import defaultdict, OrderedDict
 from math import log, exp
+from heapdict import heapdict
 
 def process_grammar_line(line):
     line = line.strip().split("->")
@@ -83,19 +84,19 @@ def print_chart(chart):
     print
     
 def INIT(words):
-    chart, backptrs, unfinished = [], [], []
+    chart, backptrs, unfinished, completed = [], [], [], []
     for x in xrange(len(words)+1):
         chart.append(OrderedDict())
         backptrs.append(defaultdict(list))
         unfinished.append(defaultdict(set))
-    return chart, backptrs, unfinished
+        completed.append(heapdict())
+    return chart, backptrs, unfinished, completed
 
 def EARLEY_PARSE(words, grammar):
     TOP, nonterminals, grammar_table, pos_table = grammar
-    chart, backptrs, unfinished = INIT(words)
+    chart, backptrs, unfinished, completed = INIT(words)
     chart[0][(TOP, (TOP,), 0, 0)] = 0.0
 
-    seen = defaultdict(list)
     for k in xrange(len(words)):
         for i,state in enumerate(chart[k]):
             #print k, i, state, chart[k][state]
@@ -107,12 +108,11 @@ def EARLEY_PARSE(words, grammar):
                     chart, unfinished = SCANNER(chart, unfinished,
                                                 state, k, pos_table, words)
             else:
-                seen[(k,state)].append((i,chart[k][state]))
-                chart, backptrs, unfinished = COMPLETER(chart, backptrs, unfinished, state, k)
+                chart, backptrs, unfinished, completed = COMPLETER(chart, backptrs, unfinished, completed, state, k)
     
     for i,state in enumerate(chart[k+1]):
         if finished(state):
-            chart, backptrs, unfinished = COMPLETER(chart, backptrs, unfinished, state, k+1)
+            chart, backptrs, unfinished, completed = COMPLETER(chart, backptrs, unfinished, completed, state, k+1)
     return chart, backptrs
 
 def PREDICTOR(chart, backptrs, unfinished,
@@ -137,7 +137,7 @@ def SCANNER(chart, unfinished,
             unfinished[k+1][next_element_of(progressed_state)].add(progressed_state)
     return chart, unfinished
 
-def COMPLETER(chart, backptrs, unfinished, completed_state, k):
+def COMPLETER(chart, backptrs, unfinished, completed, completed_state, k):
     B, gamma, i, x = completed_state
 
     for incomplete_state in unfinished[x][B]:
@@ -166,7 +166,7 @@ def COMPLETER(chart, backptrs, unfinished, completed_state, k):
                     backptrs[k][progressed_state].append(prev_backptr)
                 backptrs[k][progressed_state].append((completed_state, k))
                 unfinished[k][next_element_of(progressed_state)].add(progressed_state)
-    return chart, backptrs, unfinished
+    return chart, backptrs, unfinished, completed
 
 
 def BACKTRACK(chart, backptrs, state, k, nonterminals):
