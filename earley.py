@@ -9,7 +9,6 @@ FLAGS=flags.FLAGS
 
 from collections import defaultdict, OrderedDict
 from math import log, exp
-import math
 
 def process_grammar_line(line):
     line = line.strip().split("->")
@@ -150,7 +149,7 @@ def COMPLETER(chart, backptrs, unfinished, completed_state, k):
 
         if finished(progressed_state):
             progressed_state = (A, (A,), 1, j)
-            if prob > chart[k].get(progressed_state, -float('inf')):
+            if progressed_state not in chart[k] or prob > chart[k][progressed_state]:
                 if progressed_state in chart[k]:
                     del chart[k][progressed_state]
                 chart[k][progressed_state] = prob
@@ -160,7 +159,7 @@ def COMPLETER(chart, backptrs, unfinished, completed_state, k):
                 backptrs[k][progressed_state].append((completed_state, k))
                 
         else:
-            if prob > chart[k].get(progressed_state, -float('inf')):
+            if progressed_state not in chart[k] or prob > chart[k][progressed_state]:
                 chart[k][progressed_state] = prob
                 backptrs[k][progressed_state] = []
                 for prev_backptr in backptrs[x][incomplete_state]:
@@ -216,4 +215,4 @@ if __name__ == "__main__":
         if best_state is None:
             continue
         tree = BACKTRACK(chart, backptrs, best_state, len(chart)-1, nonterminals)
-        print tree, math.exp(best_prob)
+        print tree, exp(best_prob)
