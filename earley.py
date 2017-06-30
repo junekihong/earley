@@ -8,7 +8,8 @@ import gflags as flags
 FLAGS=flags.FLAGS
 
 from collections import defaultdict, OrderedDict
-from pprint import pprint
+from math import log, exp
+import math
 
 def process_grammar_line(line):
     line = line.strip().split("->")
@@ -18,7 +19,7 @@ def process_grammar_line(line):
     gamma,p = rhs.strip().split("#")
     X = X.strip()
     gamma = tuple(gamma.strip().split(" "))
-    p = float(p)
+    p = log(float(p))
     return X, gamma, p
 
 def read_grammar(lines):
@@ -93,7 +94,7 @@ def INIT(words):
 def EARLEY_PARSE(words, grammar):
     TOP, nonterminals, grammar_table, pos_table = grammar
     chart, backptrs, unfinished = INIT(words)
-    chart[0][(TOP, (TOP,), 0, 0)] = 1.0
+    chart[0][(TOP, (TOP,), 0, 0)] = 0.0
 
     seen = defaultdict(list)
     for k in xrange(len(words)):
@@ -130,7 +131,7 @@ def SCANNER(chart, unfinished,
     X, gamma, i, j = state
     a = next_element_of(state)
     A = state[0]
-    if pos_table[words[k]][A] != 0:
+    if A in pos_table[words[k]]:
         progressed_state = (X, gamma, i+1, j)
         chart[k+1][progressed_state] = pos_table[words[k]][A]
         if not finished(progressed_state):
@@ -144,12 +145,12 @@ def COMPLETER(chart, backptrs, unfinished, completed_state, k):
         A, gamma2, i2, j = incomplete_state
         p1 = chart[k][completed_state]
         p2 = chart[x][incomplete_state]
-        prob = p1*p2
+        prob = p1+p2
         progressed_state = (A, gamma2, i2+1, j)
 
         if finished(progressed_state):
             progressed_state = (A, (A,), 1, j)
-            if prob > chart[k].get(progressed_state, 0):
+            if prob > chart[k].get(progressed_state, -float('inf')):
                 if progressed_state in chart[k]:
                     del chart[k][progressed_state]
                 chart[k][progressed_state] = prob
@@ -159,7 +160,7 @@ def COMPLETER(chart, backptrs, unfinished, completed_state, k):
                 backptrs[k][progressed_state].append((completed_state, k))
                 
         else:
-            if prob > chart[k].get(progressed_state, 0):
+            if prob > chart[k].get(progressed_state, -float('inf')):
                 chart[k][progressed_state] = prob
                 backptrs[k][progressed_state] = []
                 for prev_backptr in backptrs[x][incomplete_state]:
@@ -215,4 +216,4 @@ if __name__ == "__main__":
         if best_state is None:
             continue
         tree = BACKTRACK(chart, backptrs, best_state, len(chart)-1, nonterminals)
-        print tree, best_prob
+        print tree, math.exp(best_prob)
