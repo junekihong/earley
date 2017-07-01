@@ -200,15 +200,6 @@ if __name__ == "__main__":
         chart,backptrs = EARLEY_PARSE(words, grammar)
         #print "CHART:"
         #print_chart(chart)
-
-        """
-        for j,y in enumerate(sorted(chart[len(words)].keys())):
-            if finished(y):
-                print "*",
-                #else:
-                #    print " ",
-                print j,y, "\t", chart[len(words)][y]
-        """
         
         best_state, best_prob = None, None
         for state in chart[len(chart)-1]:
