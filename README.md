@@ -1,8 +1,8 @@
 
 Run with:
 
-cat inputs/toy.txt | python earley_partialmerge.py grammars/toy.pcfg
+cat inputs/test.txt | python earley_partialmerge.py grammars/grammar.pcfg.bin
 
 or
 
-cat inputs/toy.txt | python earley_fullmerge.py grammars/toy.pcfg 
+cat inputs/test.txt | python earley_fullmerge.py grammars/grammar.pcfg.bin
