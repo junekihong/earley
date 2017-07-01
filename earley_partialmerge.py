@@ -151,17 +151,16 @@ def COMPLETER(chart, backptrs, unfinished, completed_state, k):
                 if progressed_state in chart[k]:
                     del chart[k][progressed_state]
                 chart[k][progressed_state] = prob
-                backptrs[k][progressed_state] = []
-                for prev_backptr in backptrs[x][incomplete_state]:
-                    backptrs[k][progressed_state].append(prev_backptr)
+                backptrs[k][progressed_state] = [prev_backptr for
+                                                 prev_backptr in backptrs[x][incomplete_state]]
                 backptrs[k][progressed_state].append((completed_state, k))
                 
         else:
             if progressed_state not in chart[k] or prob > chart[k][progressed_state]:
                 chart[k][progressed_state] = prob
-                backptrs[k][progressed_state] = []
-                for prev_backptr in backptrs[x][incomplete_state]:
-                    backptrs[k][progressed_state].append(prev_backptr)
+
+                backptrs[k][progressed_state] = [prev_backptr for
+                                                 prev_backptr in backptrs[x][incomplete_state]]
                 backptrs[k][progressed_state].append((completed_state, k))
                 unfinished[k][next_element_of(progressed_state)].add(progressed_state)
     return chart, backptrs, unfinished
@@ -201,6 +200,15 @@ if __name__ == "__main__":
         chart,backptrs = EARLEY_PARSE(words, grammar)
         #print "CHART:"
         #print_chart(chart)
+
+        """
+        for j,y in enumerate(sorted(chart[len(words)].keys())):
+            if finished(y):
+                print "*",
+                #else:
+                #    print " ",
+                print j,y, "\t", chart[len(words)][y]
+        """
         
         best_state, best_prob = None, None
         for state in chart[len(chart)-1]:
